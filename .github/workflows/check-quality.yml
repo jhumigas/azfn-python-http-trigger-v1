@@ -1,0 +1,30 @@
+name: 🧹 check quality
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup python env
+      uses: ./.github/actions/setup-python-env
+      with:
+        python-version: '3.8'
+
+    - name: Check the code quality
+      run: make check-flake8
+
+    - name: Check for vulnerabilities in dependencies
+      run: make check-safety
+    
+    - name: Check for security vulnerabilities
+      run: make check-bandit

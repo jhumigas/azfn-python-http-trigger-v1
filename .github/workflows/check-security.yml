@@ -1,0 +1,83 @@
+name: 🛡️ security gate
+on:
+  workflow_call:
+    inputs:
+      checkmarx-project:
+        required: true
+        type: string
+      checkmarx-team:
+        required: true
+        type: string
+    secrets:
+      SONARQUBE_SCAN_TOKEN:
+        required: true
+      SONAR_URL:
+        required: true
+      CHECKMARX_USER:
+        required: true
+      CHECKMARX_PASS:
+        required: true
+      CHECKMARX_CLIENT_SECRET:
+        required: true
+
+jobs:
+  sonarqube:
+    name: 📡 SonarQube
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download report coverage.xml
+        uses: actions/download-artifact@v3
+        with:
+          name: coverage-${{ github.sha }}
+      - uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARQUBE_SCAN_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_URL }}
+
+  checkmarx:
+    name: ✅ Checkmarx
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Checkmarx CxFlow Action
+        uses: checkmarx-ts/checkmarx-cxflow-github-action@v1.3
+        with:
+          project: FILL_ME
+          team: /CxServer/FILL_ME
+          checkmarx_url: https://fill_me.net
+          checkmarx_username: ${{ secrets.CHECKMARX_USER }}
+          checkmarx_password: ${{ secrets.CHECKMARX_PASS }}
+          checkmarx_client_secret: ${{ secrets.CHECKMARX_CLIENT_SECRET }}
+          break_build: false
+          scanners: sast
+          incremental: false
+          bug_tracker: none
+          params: |
+            --namespace=${{ github.repository_owner }} /
+            --repo-name=${{ github.event.repository.name }} /
+            --branch=${{ github.ref }} /
+            --exclude_folders='cvs, .svn, .hg , .git, .bzr, bin , obj,  backup, .idea, node_modules, .github, data, tests' /
+            --exclude_files='!**/*.DS_Store, !**/*.ipr, !**/*.iws, !**/*.bak, !**/*.tmp, !**/*.aac, !**/*.aif, !**/*.iff, !**/*.m3u, !**/*.mid, !**/*.mp3,!**/*.mpa, !**/*.ra, !**/*.wav, !**/*.wma, !**/*.3g2, !**/*.3gp, !**/*.asf, !**/*.asx, !**/*.avi,!**/*.flv, !**/*.mov, !**/*.mp4, !**/*.mpg,  !**/*.rm, !**/*.swf, !**/*.vob, !**/*.wmv, !**/*.bmp, !**/*.gif, !**/*.jpg, !**/*.png, !**/*.psd, !**/*.tif, !**/*.swf, !**/*.jar, !**/*.zip, !**/*.rar, !**/*.exe, !**/*.dll, !**/*.pdb, !**/*.7z, !**/*.gz, !**/*.tar.gz, !**/*.tar, !**/*.gz, !**/*.ahtm, !**/*.ahtml, !**/*.fhtml, !**/*.hdm, !**/*.hdml,   !**/*.hsql, !**/*.ht, !**/*.hta, !**/*.htc, !**/*.htd, !**/*.war, !**/*.ear, !**/*.htmls, !**/*.ihtml, !**/*.mht, !**/*.mhtm, !**/*.mhtml, !**/*.ssi, !**/*.stm, !**/*.stml, !**/*.ttml, !**/*.txn, !**/*.xhtm, !**/*.xhtml, !**/*.class, !**/*.iml, !**/*.xlsx, !**/*.toml, !**/*.lock, !**/*.md, !**/*.ini, !**/.flake8, !**/.coveragerc'
+
+  semgrep:
+    name: 🔎 Semgrep
+    runs-on: ubuntu-20.04
+    container:
+      image: returntocorp/semgrep
+    # Skip any PR created by dependabot to avoid permission issues
+    # And only for branches expect main
+    if: (github.actor != 'dependabot[bot]' && github.ref != 'refs/heads/main')
+    steps:
+      # Fetch project source
+      - uses: actions/checkout@v3
+
+      - run: semgrep ci
+        env:
+          # Select rules for your scan with one of these two options.
+          # Option 1: set hard-coded rulesets
+          SEMGREP_RULES: >- # more at semgrep.dev/r
+            p/security-audit
+            p/secrets

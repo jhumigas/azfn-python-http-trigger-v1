@@ -1,0 +1,43 @@
+name: 🏗️ build
+
+on:
+  workflow_call:
+    inputs:
+      bundle_path:
+        description: 'Azure functionApp Bundle path to deploy'
+        required: true
+        type: string
+    secrets:
+      CI_GITHUB_TOKEN:
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup python env
+      uses: ./.github/actions/setup-python-env
+      with:
+        python-version: '3.8'
+
+    - name: Build bundle
+      run: |
+          mkdir -p ${{ inputs.bundle_path }}
+          mv function_apps/* ${{ inputs.bundle_path }}
+          make build-bundle OUTPUT_DIR=${{ inputs.bundle_path}}
+    
+    - name: upload-artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: aznf-bundle-${{ github.sha }}
+        path: ${{ inputs.bundle_path }}
+        if-no-files-found: error
+

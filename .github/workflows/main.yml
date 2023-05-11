@@ -1,0 +1,46 @@
+
+
+name: 🔥 ci/cd
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'feat/**'
+      - 'fix/**'
+      - 'build/**'
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  quality:
+    uses: ./.github/workflows/check-quality.yml
+
+  tests:
+    uses: ./.github/workflows/run-tests.yml
+
+  
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      bundle_path: 'azfn-bundle'
+    secrets:
+      CI_GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN }}
+  
+  deploy_dev:
+    needs: [quality, tests, build]
+    if: false
+    # if: ${{ startsWith(github.ref, 'refs/heads/feat/') || startsWith(github.ref, 'refs/heads/fix/') || startsWith(github.ref, 'refs/heads/tech/')}}
+    uses: ./.github/workflows/deploy.yml
+    with:
+      deploy_env: dev
+      bundle_path: 'azfn-bundle'
+      python_version: '3.8'
+    secrets:
+      AZURE_FUNCTIONAPP_NAME: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+      AZURE_FUNCTIONAPP_PUBLISH_PROFILE: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+      SUBSCRIPTION_ID: ${{ secrets.SUBSCRIPTION_ID }}
+      RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+

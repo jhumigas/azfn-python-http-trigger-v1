@@ -1,0 +1,48 @@
+version: '3.4'
+
+services:
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    hostname: azurite
+    restart: always
+    command: "azurite --blobHost ${DOCKER_AZURITE_HOST} --blobPort ${DOCKER_AZURITE_BLOB_PORT} --queueHost ${DOCKER_AZURITE_HOST} --queuePort ${DOCKER_AZURITE_QUEUE_PORT} --tableHost ${DOCKER_AZURITE_HOST} --tablePort ${DOCKER_AZURITE_TABLE_PORT} -l /workspace -d /workspace/debug.log"
+    ports:
+      - "${DOCKER_AZURITE_BLOB_PORT}:${DOCKER_AZURITE_BLOB_PORT}"
+      - "${DOCKER_AZURITE_QUEUE_PORT}:${DOCKER_AZURITE_QUEUE_PORT}"
+      - "${DOCKER_AZURITE_TABLE_PORT}:${DOCKER_AZURITE_TABLE_PORT}"
+    environment:
+      - AZURITE_ACCOUNTS=${DOCKER_AZURITE_ACCOUNT_NAME}:${DOCKER_AZURITE_ACCOUNT_KEY}
+    volumes:
+      - azurite_volume:/workspace
+    profiles:
+      - local_env
+
+  azure-function-host:
+    build:
+      context: .
+      args:
+        - DOCKER_AZURITE_ACCOUNT_NAME=${DOCKER_AZURITE_ACCOUNT_NAME}
+        - DOCKER_AZURITE_ACCOUNT_KEY=${DOCKER_AZURITE_ACCOUNT_KEY}
+        - DOCKER_AZURITE_BLOB_PORT=${DOCKER_AZURITE_BLOB_PORT}
+        - DOCKER_AZURITE_QUEUE_PORT=${DOCKER_AZURITE_QUEUE_PORT}
+        - DOCKER_AZURITE_TABLE_PORT=${DOCKER_AZURITE_TABLE_PORT}
+        - DOCKER_AZFNS_PORT=${DOCKER_AZFNS_PORT}
+    ports:
+      - "${DOCKER_AZFNS_PORT}:80"
+    profiles:
+      - local_env
+    depends_on:
+      - azurite
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  azurite_volume: null
+networks:
+  database_network:
+    driver: bridge

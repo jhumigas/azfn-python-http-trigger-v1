@@ -1,0 +1,84 @@
+name: 🚀 deploy
+
+on:
+  workflow_call:
+    inputs:
+      deploy_env:
+        description: 'name of the deployment environment'
+        required: true
+        type: string
+      bundle_path:
+        description: 'Azure functionApp bundle path'
+        required: true
+        type: string
+      python_version:
+        description: 'Python version'
+        required: true
+        type: string
+    secrets:
+      AZURE_FUNCTIONAPP_NAME:
+        required: true
+      AZURE_FUNCTIONAPP_PUBLISH_PROFILE:
+        required: true
+      CLIENT_ID:
+        required: true
+      TENANT_ID:
+        required: true
+      SUBSCRIPTION_ID:
+        required: true
+      RESOURCE_GROUP:
+        required: true
+
+permissions:
+  id-token: none
+  contents: read
+
+jobs:
+  deploy:
+    name: 🚀 Zip deploy azure function
+    runs-on: ubuntu-20.04
+    environment: ${{ inputs.deploy_env }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Download bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: aznf-bundle-${{ github.sha }}
+          path: ${{ inputs.bundle_path }}
+
+      - name: Az login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.CLIENT_ID }}
+          tenant-id: ${{ secrets.TENANT_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
+
+      - name: Deploy package
+        shell: bash
+        run: |
+          export token=$(az account get-access-token --query "accessToken" -o tsv)
+          pushd "$BUNDLE_PATH"
+          zip -r package.zip . -i "*"
+          http_response=$(curl -i -X POST -H "Authorization: Bearer $token" --data-binary @package.zip "https://$FUNCTION_APP_NAME.scm.azurewebsites.net/api/zipdeploy?isAsync=false" --write-out "HTTPSTATUS: %{http_code}\n")
+          http_status=$(echo $http_response | tr -d '\n' | sed -e 's/.*HTTPSTATUS://')
+          if [ $http_status -ne 200 ]; then
+            echo "Zip file upload failed and the status code is: $http_status"
+            exit 1
+          else
+            echo "Zip file upload successfully and the status code is: $http_status"
+          fi
+
+        env:
+          FUNCTION_APP_NAME: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+          BUNDLE_PATH: ${{ inputs.bundle_path }}
+
+      - name: Set variables on App Settings
+        shell: bash
+        run: |
+          az functionapp config appsettings set -g ${{ secrets.RESOURCE_GROUP }} -n ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
